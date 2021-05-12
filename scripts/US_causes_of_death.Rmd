@@ -5,7 +5,7 @@ date: "5/4/2021"
 output:
   html_document:
     df_print: paged
-  pdf_document: default
+  word_document: default
 ---
 
 # Libraries 
@@ -13,80 +13,79 @@ output:
 ```{r}
 library(tidyverse)
 library(here)
+library(patchwork)
+library(RColorBrewer)
+library(kableExtra)
+
 library(maps)
 library(mapdata)
-library(patchwork)
+library(mapproj)
 
-#library(mapproj)
-#library(raster)
-#library(viridis)
-#library(leaflet)
+library(cowsay)
+library(beepr)
+library(praise)
+
 ```
+
+WELCOME!
+
+```{r}
+say("Welcome", by = "hypnotoad")
+```
+
+
+# Introduction
+
+What are the leading causes of death in the United States? 
+
+Findings:
+
+* Preventable 
+* Unhealthy lifestyle choices 
+* Mapping showed increase in preventable causes of death
+
+
 
 # Load in Data
 
 ```{r}
-
 # This is the primary source of data:
-US_causes_of_death <- read_csv(here("Biol551", "Final_Project", "data", "Leading_Causes_of_Death_United_States.csv"))
-
-view(US_causes_of_death)
+US_causes_of_death <- read_csv(here("data", "Leading_Causes_of_Death_United_States.csv"))
 
 
-US_death <- US_causes_of_death %>%
-  select(Year, `Cause Name`, State, Deaths)
-
-view(US_death)
+# This is a weekly count of deaths. I will use this to plot COVID deaths
+US_weekly_death <- read_csv(here("data", "Weekly_Counts_of_Deaths.csv"))
 
 
-
-# Load in mapping data
-states<-map_data("state")
-view(states)
-
-
-
-# This is another source of death data in case the first doesn't work out
-US_weekly_death <- read_csv(here("Final_Project", "data", "Weekly_Counts_of_Deaths.csv"))
 
 
 # The following datasets may explain why we are seeing a significant amount of certain deaths:
-# I will npt be using them in the presentation
 
-Obesity_health <- read_csv(here("Final_Project", "data", "Nutrition_Physical_Activity_and_Obesity.csv"))
+Obesity_health <- read_csv(here("data","Nutrition_Physical_Activity_and_Obesity.csv"))
 
-
-Tobacco_consumption <- read_csv(here("Final_Project", "data", "Adult_Tobacco_Consumption.csv"))
-
-view(Tobacco_consumption)
+Tobacco_consumption <- read_csv(here("data", "Adult_Tobacco_Consumption.csv"))
 
 ```
 
-# Introduction
 
-The goal of this project is to create a map of the US, on the map will be listed the number 1 cause of death per state.  
+# What are the leading causes of Death in the United States?
 
-I also want to do a seperate chart showing the rise of certain disease over the past few years, or in the case of COVID19... on a weekly basis. 
-
+## Manipulate the data
 
 ```{r}
 US_DEATH <- US_causes_of_death %>%
-  select(Year, `Cause Name`, State, Deaths) %>%
-  filter(State == "United States") 
-
-view(US_DEATH)
+  select(Year, `Cause Name`, State, Deaths) %>% #select for columns involving the listed
+  filter(State == "United States") # filter for only national data (filter out the state - level data)
 
 ```
 
-
-
-# Plot 
+## Plot 
 
 ```{r}
 # Create line plot
 Top10 <- US_DEATH %>% 
-  filter(`Cause Name`!= "All causes") %>% # remove all causes so that it does not scew the data
-  ggplot( aes(x= Year, y= Deaths, group= `Cause Name`, color= `Cause Name`)) +
+  filter(`Cause Name`!= "All causes") %>% # remove all causes so that it does not skew the data
+  ggplot( aes(x= Year, y= Deaths, group= `Cause Name`, color= `Cause Name`)) + # plot number of deaths by year for each cause
     geom_line()+ #create line plot for each of the top 10 reasons for death in the US
   labs(title = "Leading Causes of Death in the United States")+
   theme_classic()+
@@ -94,7 +93,6 @@ Top10 <- US_DEATH %>%
         axis.title.x = element_blank())
 
 Top10
-
 ```
 
 ```{r}
@@ -105,14 +103,13 @@ Eight <- US_DEATH %>%
          `Cause Name`!= "All causes") #Filter out all causes and the top two causes of death to see the remaining line plots with greater clarity
 
 #create second line plot
+#exclude figure title and legend title, include x-axis
 Top8 <- Eight %>%
   ggplot( aes(x= Year, y= Deaths, group= `Cause Name`, color= `Cause Name`)) +
-    geom_line()+
+    geom_line()+   
   theme_classic()+
-     theme(legend.position = "none")
+     theme(legend.title = element_blank())
 
-
-Top8
 ```
 
 
@@ -121,12 +118,183 @@ Top8
 
 ```{r}
 Top10/ Top8 +
-  plot_layout(guides = 'collect')
+  plot_layout(guides = 'collect')+
+   plot_annotation(subtitle = "Source: Centers for Disease Control and Prevention")
+
+# Need two legends because I could not get the color coding to match up
+```
+
+
+# Create a Pie Plot of the Top Three preventable Causes of death
+
+## Manipulate Data
+
+```{r}
+PI_death <- US_DEATH %>%
+  filter(`Cause Name` == c("All causes","Heart disease", "CLRD", "Diabetes")) #filter out the leading preventable causes of death
+
+```
+
+
+```{r}
+# Filter for earliest time period 
+Pie_1999 <- US_DEATH %>% 
+  filter(`Year` == 1999) 
+
+per_1999 <- Pie_1999 %>%
+  mutate( #create a column for percentage of dead from that cause
+    Percent_Death = case_when(
+      `Cause Name` == "CLRD" ~ 100*124181/2391399, #people that died of the disease / total number of people that died that year
+      `Cause Name` == "Diabetes" ~ 100*68399/2391399,
+      `Cause Name` == "Heart disease" ~ 100*725192/2391399,
+      `Cause Name` == "All causes" ~ 61.621962))
+
+
+# Filter for most recent time period 
+Pie_2017 <- US_DEATH %>% 
+  filter(`Year` == 2017)
+
+per_2017 <- Pie_2017 %>%
+  mutate(
+    Percent_Death = case_when(
+      `Cause Name` == "CLRD" ~ 100*160201/2813503,
+      `Cause Name` == "Diabetes" ~ 100*83564/2813503,
+      `Cause Name` == "Heart disease" ~ 100*647457/2813503,
+      `Cause Name` == "All causes" ~ 68.323403))
+
+```
+
+
+## Create color palette
+```{r}
+myPalette <- brewer.pal(4, "Set2") 
+```
+
+
+## Assign values to the pi slices 
+
+```{r}
+# 1999 Data 
+per_1999 %>%
+  kbl() %>% # make it a kable table to see all my percentages easily
+  kable_classic() 
+
+a <- c(61.62, 2.86, 5.19, 30.33)
+```
+
+```{r}
+# 2017 Data
+per_2017 %>%
+  kbl() %>% # make it a kable table
+  kable_classic()
+
+b <- c(68.32, 2.97, 5.69, 23.01)
+```
+
+
+## Plot pi charts
+
+```{r}
+pie(a, 
+    clockwise = TRUE,
+    labels = c("Other", "Diabetes", "CLRD", "Heart disease"),
+    border="white", 
+    col=myPalette ) 
+```
+
+```{r}
+pie(b, 
+    clockwise = TRUE,
+    labels = c("Other", "Diabetes", "CLRD", "Heart disease"),
+    border="white", 
+    col=myPalette ) 
+
+# I was unable to patch pi charts together because they are not ggplots. ggplotify did not work
+```
+
+
+Discussion:
+
+Decrease in Heart disease may be related in the more common use of and emergence of new antihypertensive drugs (drugs that reduce blood pressure). Plot from earlier also showed a decreased in stroke - related death.
+
+I was curious to know why respiratory disease death increased even though tobacco consumption has been dropping
+
+
+
+
+# Possible explanations
+
+Explanations for why our heart disease deaths are generally high and why CLRD- associated deaths did not decrease over the past two decades : Tobacco consumption and Obesity 
+
+## Manipulate data
+
+```{r}
+#Tobacco consumption dataset
+Yearly_con <- Tobacco_consumption %>%
+  filter(Year == c(2000, 2019), #Look at earliest and most recent years
+         Measure == "All Combustibles") # look at all combustible (smokeble) tobacco products that were sold
+
+
+
+# Obesity dataset
+Health <- Obesity_health %>%
+  filter(LocationDesc == "National",
+         Question == c("Percent of adults aged 18 years and older who have obesity", "Percent of adults aged 18 years and older who have an overweight classification"), #filter for obesity and overweight 
+         StratificationCategory1 == "Age (years)", #only age, ignore race, education, etc. 
+         `Age(years)` == "18 - 24") %>%
+  select(1:11)
+
+```
+
+
+## Plot Tobacco consumption
+
+```{r}
+Yearly_con %>%
+  group_by(Measure) %>%
+  ggplot(aes(x = Year,
+             y = Total))+
+  geom_col() +
+  labs(title = "Total Tobacco consumption in the United States",
+       subtitle = "Fiscal years 2000 and 2019",
+       y = "Cigarette Equivalents")
+
+```
+Possible explanation: People from older generations are dying. 
+
+
+## Plot percent of overweight and obese persons in the US
+```{r}
+Health %>%
+  ggplot(aes(x = YearStart,
+             y = Data_Value,
+             group = Question, #obese or overweight
+             color = Question))+
+  geom_line()+
+  labs(title = "Percent of US Population that is Overweight or Obese",
+       caption = "Source: Data.gov. Centers for Disease Control and Prevention",
+       x = "Year",
+       y = "Percentage")+
+  theme_classic()+
+  theme(legend.position = "bottom",
+        legend.direction = "vertical")
+  
 ```
 
 
 
-# Manipulate 
+# Map heart disease, CLRD, & diabetes deaths
+
+## Manipulate the data
+```{r}
+US_death <- US_causes_of_death %>%
+  select(Year, `Cause Name`, State, Deaths)
+
+# Load in mapping data
+states<-map_data("state")
+
+```
+
 
 ```{r}
 # To join the US_death data to the state mapping data, I need to first recode the state names under the state column of the death dataset to match the state names under region column of the state dataset.
@@ -185,13 +353,11 @@ US <- US_death %>%
       State == "District of Columbia" ~ "washington"))
 
 
-# Filter for the years 1999 and 2017
+# Filter for the years 1999 and 2017, respectively 
 
 stat_death_1999 <- US %>%
    filter(complete.cases(.), # removes all rows that have NAs
-          Year == 1999, #only look at 1999 data
-#maybe remove #`Cause Name` != "All causes"
-          ) %>%
+          Year == 1999) %>% #only look at 1999 data
   select(Year, 'Cause Name', Deaths, region) #select for these columns
 
 stat_death_2017 <- US %>%
@@ -199,14 +365,11 @@ stat_death_2017 <- US %>%
           Year == 2017) %>% #only look at 2017 data
   select(Year, 'Cause Name', Deaths, region) #select for these columns
 
-
-view(stat_death_1999)
-view(stat_death_2017)
 ```
 
 
 
-# Join the data 
+## Join the state(mapping) data and the death statistics 
 
 ```{r}
 # Data from 1999
@@ -216,87 +379,233 @@ mapdata_1999 <- (full_join(states, stat_death_1999)) #Join the cleaned up US_dea
 # Data from 2017
 mapdata_2017 <- (full_join(states, stat_death_2017)) #Join the cleaned up US_death data to the state mapping data [2017]
 
-view(mapdata_1999)
 
-view(mapdata_2017)
+#NOTE: all of this is prep to map the three leading causes of death individually
 ```
 
 
-# Map the data
+## Map the data
 
-## Mapping 1999 and 2017 Heart Disease Deaths
+### Map heart disease deaths for 1999 and 2017
 ```{r}
-
-#Fix data for 1999
+# Fix data for 1999
 HD_1999 <- mapdata_1999 %>%
-  filter(`Cause Name` == "Heart disease") #filter for heart disease
+  filter(`Cause Name` == "Heart disease") #filter for heart disease deaths
 
-view(HD_1999)
 
 HD_map99 <- HD_1999 %>%
-  ggplot(aes(x= long, 
+  ggplot(aes(x= long, #plot lat and long 
              y = lat, 
-             map_id = region)) + # plot states
-  geom_polygon(aes(fill = Deaths), #color depth depends on number of deaths
+             map_id = region)) +
+  geom_polygon(aes(fill = Deaths), #create polygons for the shapefiles and fill with number of deaths
                color = "Black")+
-  coord_map("ortho", orientation = c(39, -98, 0))+ #project in ortho
-  scale_fill_gradient(trans = "log10")+ #color gradient
-  labs(title = "Heart disease - related deaths in the United States",
-       subtitle = "Fiscal Year 1999",
-       caption = "Source: Centers for Disease Control and Prevention. Data.gov")+
-  theme(axis.text.x = element_blank(),
+  coord_map("ortho", orientation = c(39, -98, 0))+ #"NEVER USE UNPROJECTED DATA!!" -Sensai Rachman
+  scale_fill_gradient(trans = "log10", low = "white", high = "dark blue")+
+  labs(subtitle = "Fiscal Year 1999")+
+  theme(axis.text.x = element_blank(), #got rid of axis's because they are unnecessary 
         axis.text.y = element_blank(),
         axis.ticks = element_blank(),
         axis.title.y = element_blank(),
         axis.title.x = element_blank(),
-        rect = element_blank(), #remove axis's and background as they are unnecessary 
-        plot.title = element_text(size  =24, face = "bold"))
-  
+        rect = element_blank(),
+        legend.position = "none")
 
-HD_map99
 ```
 
 
-
 ```{r}
-
-#Fix for 2017
+# Fix data for 2017
 HD_2017 <- mapdata_2017 %>%
-  filter(`Cause Name` == "Heart disease") #filter for heart disease
+  filter(`Cause Name` == "Heart disease") #filter for heart disease deaths
 
-view(HD_2017)
 
 HD_map17 <- HD_2017 %>%
   ggplot(aes(x= long, 
              y = lat, 
+             map_id = region)) +
+  geom_polygon(aes(fill = Deaths),  
+               color = "Black")+
+  coord_map("ortho", orientation = c(39, -98, 0))+ #
+  scale_fill_gradient(trans = "log10", low = "white", high = "dark blue")+
+  labs(subtitle = "Fiscal year 2017")+
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title.y = element_blank(),
+        axis.title.x = element_blank(),
+        rect = element_blank())
+
+```
+
+###  Bring HD plots together with Patchwork
+```{r}
+HD_map99 + HD_map17 + #patch the HD maps together and assign a title and caption
+  plot_annotation(title = 'Heart Disease - Related Deaths \nUnited States',
+                  caption = "Source: Centers for Disease Control and Prevention. Data.gov")+
+  theme(plot.title = element_text(size = 24, face = "bold"))
+```
+
+
+
+
+### Map Cronic lower respiratory disease deaths for 1999 and 2017
+
+```{r}
+#Fix data for 1999
+CLRD_1999 <- mapdata_1999 %>%
+  filter(`Cause Name` == "CLRD") #filter for CLRD
+
+
+CLRD_map99 <- CLRD_1999 %>%
+  ggplot(aes(x= long, 
+             y = lat, 
              map_id = region)) + # plot states
   geom_polygon(aes(fill = Deaths), #color depth depends on number of deaths
                color = "Black")+
-  coord_map("ortho", orientation = c(39, -98, 0))+ #project in ortho
-  scale_fill_gradient(trans = "log10")+ #color gradient
-  labs(title = "Heart disease - related deaths in the United States",
-       subtitle = "Fiscal Year 2017",
-       caption = "Source: Centers for Disease Control and Prevention. Data.gov")+
+  coord_map("ortho", orientation = c(39, -98, 0))+ #project in ortho and orient to show only the US in best position
+  scale_fill_gradient(trans = "log10", low = "yellow", high  = "red")+ #color gradient
+  labs(subtitle = "Fiscal Year 1999")+
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank(),
         axis.ticks = element_blank(),
         axis.title.y = element_blank(),
         axis.title.x = element_blank(),
         rect = element_blank(), #remove axis's and background as they are unnecessary 
-        plot.title = element_text(size  =24, face = "bold"))
-  
+        legend.position = "none") 
 
-HD_map17
 ```
 
-#  Bring plots together with Patchwork
+
 ```{r}
-# HD_1999 + HD_2017 
+#Fix data for 2017
+CLRD_2017 <- mapdata_2017 %>%
+  filter(`Cause Name` == "CLRD") #filter for CLRD
+
+
+CLRD_map17 <- CLRD_2017 %>%
+  ggplot(aes(x= long, 
+             y = lat, 
+             map_id = region)) + # plot states
+  geom_polygon(aes(fill = Deaths), #color depth depends on number of deaths
+               color = "Black")+
+  coord_map("ortho", orientation = c(39, -98, 0))+ #project in ortho
+  scale_fill_gradient(trans = "log10", low = "yellow", high = "red")+ #color gradient
+  labs(subtitle = "Fiscal Year 2017")+
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title.y = element_blank(),
+        axis.title.x = element_blank(),
+        rect = element_blank()) #remove axis's and background as they are unnecessary 
+
+```
+
+
+### Bring CLRD plots together with Patchwork
+
+```{r}
+CLRD_map99 + CLRD_map17 +
+  plot_annotation(title = 'Chronic Lower Respritory Disease - Related Deaths \nUnited States',
+                  caption = "Source: Centers for Disease Control and Prevention. Data.gov")+
+  theme(plot.title = element_text(size = 24, face = "bold"))
 ```
 
 
 
 
 
+### Map diabetes deaths for 1999 and 2017
 
+```{r}
+#Fix data for 1999
+Dia_1999 <- mapdata_1999 %>%
+  filter(`Cause Name` == "Diabetes") #filter for diabetes
+
+
+Dia_map99 <- Dia_1999 %>%
+  ggplot(aes(x= long, 
+             y = lat, 
+             map_id = region)) + # plot states
+  geom_polygon(aes(fill = Deaths), #color depth depends on number of deaths
+               color = "Black")+
+  coord_map("ortho", orientation = c(39, -98, 0))+ #project in ortho
+  scale_fill_gradient(trans = "log10", low = "pink", high  = "purple")+ #color gradient
+  labs(subtitle = "Fiscal Year 1999")+
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title.y = element_blank(),
+        axis.title.x = element_blank(),
+        rect = element_blank(), #remove axis's and background as they are unnecessary 
+        legend.position = "none")
+
+```
+
+```{r}
+#Fix data for 2017
+Dia_2017 <- mapdata_2017 %>%
+  filter(`Cause Name` == "Diabetes") #filter for diabetes
+
+
+Dia_map17 <- Dia_2017 %>%
+  ggplot(aes(x= long, 
+             y = lat, 
+             map_id = region)) + # plot states
+  geom_polygon(aes(fill = Deaths), #color depth depends on number of deaths
+               color = "Black")+
+  coord_map("ortho", orientation = c(39, -98, 0))+ #project in ortho
+  scale_fill_gradient(trans = "log10", low = "pink", high  = "purple")+ #color gradient
+  labs(subtitle = "Fiscal Year 2017")+
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title.y = element_blank(),
+        axis.title.x = element_blank(),
+        rect = element_blank()) #remove axis's and background as they are unnecessary 
+
+```
+
+
+
+
+###  Bring HD plots together with Patchwork
+
+```{r}
+Dia_map99 + Dia_map17 +
+  plot_annotation(title = 'Diabetes - Related Deaths \nUnited States',
+                  caption = "Source: Centers for Disease Control and Prevention. Data.gov")+
+  theme(plot.title = element_text(size = 24, face = "bold"))
+```
+
+
+
+###  Bring all plots together with Patchwork
+```{r}
+HD_map17 + CLRD_map17 + Dia_map17 +
+  plot_annotation(title = "Top Three Preventable Diseases in the United States",
+                  subtitle = "Heart Disease, CLRD, & Diabetes",
+                  caption = "Source: Centers for Disease Control and Prevention. Data.gov")+
+  theme(plot.title = element_text(size = 24, face = "bold", color = "red"))
+```
+
+
+
+# "Easy" tips to live a healthier life
+1.) Sleep
+2.) No sugar in the morning
+3.) Positive mentality
+
+
+
+
+
+# FINISH
+
+```{r}
+# Time to celebrate!
+beep(4) 
+beep(8) 
+praise()
+
+```
 
